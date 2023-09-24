@@ -1,0 +1,84 @@
+package com.example.exercise.controller;
+
+import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.example.exercise.domain.dto.BookDto;
+import com.example.exercise.domain.pojo.Book;
+import com.example.exercise.domain.vo.Result;
+import com.example.exercise.domain.vo.ResultType;
+import com.example.exercise.service.BookService;
+import com.example.exercise.utils.BaseUtil;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+@RequestMapping("/book")
+@RequiredArgsConstructor
+@Api(tags = "Book管理接口")
+public class BookController {
+    private final BookService bookService;
+    @ApiOperation("新增Book类接口")
+    @PostMapping
+    public Object saveBook(@RequestBody BookDto bookDto){
+        if(bookDto.getName() == null || bookDto.getName().equals("")){
+            return new Result<>(ResultType.FAIL.getCode(),"书名不合法",null);
+        }
+        Book book = BeanUtil.copyProperties(bookDto, Book.class);
+        LambdaQueryWrapper<Book> wrapper = new LambdaQueryWrapper<Book>()
+                .eq(Book::getName,book.getName());
+        if(bookService.exists(wrapper)){
+            return new Result<>(ResultType.FAIL.getCode(),"书名已经存在",null);
+        }
+        book.setCreateTime(BaseUtil.getCurrentTime());
+        book.setDelFlag(false);
+        book.setId(null);
+        if(bookService.save(book))
+            return new Result<>(ResultType.SUCCESS.getCode(),"插入成功",bookDto);
+        else
+            return new Result<>(ResultType.FAIL.getCode(),"插入失败",bookDto);
+    }
+    @ApiOperation("根据Id查找Book接口")
+    @GetMapping("id={id}")
+    public Object getBookById(@ApiParam("Book id") @PathVariable("id") Integer id){
+        LambdaQueryWrapper<Book> wrapper = new LambdaQueryWrapper<Book>()
+                .eq(Book::isDelFlag, false)
+                .eq(Book::getId,id);
+        Book book = bookService.getOne(wrapper);
+        BookDto bookDto = BeanUtil.copyProperties(book,BookDto.class);
+        if(book == null)return new Result<>(ResultType.FAIL.getCode(),"该书不存在或被删除",null);
+        return new Result<>(ResultType.SUCCESS.getCode(), "查找成功", bookDto);
+    }
+    @ApiOperation("根据id删除Book接口")
+    @DeleteMapping("{id}")
+    public Object deleteBookById(@ApiParam("Book id") @PathVariable("id") Integer id){
+        if(id == null)return new Result<>(ResultType.FAIL.getCode(),"非法Id",null);
+        LambdaQueryWrapper<Book> wrapper = new LambdaQueryWrapper<Book>()
+                .eq(Book::isDelFlag, false)
+                .eq(Book::getId,id);
+        Book book = bookService.getOne(wrapper);
+        if(book == null)return new Result<>(ResultType.FAIL.getCode(),"该书不存在或已被删除",null);
+        book.setDelFlag(true);
+        if(!bookService.updateById(book)){
+            return new Result<>(ResultType.FAIL.getCode(),"删除失败!",null);
+        }
+        return new Result<>(ResultType.SUCCESS.getCode(),"删除成功",null);
+    }
+    @ApiOperation("模糊查询书名接口")
+    @GetMapping("name={name}")
+    public Object getBookByName(@ApiParam("Book`s name") @PathVariable("name") String name){
+        LambdaQueryWrapper<Book> wrapper = new LambdaQueryWrapper<Book>()
+                .like(Book::getName,name)
+                .eq(Book::isDelFlag, false);
+        List<Book> books = bookService.list(wrapper);
+        List<BookDto> bookDtoS = new ArrayList<>();
+        books.forEach(book -> {bookDtoS.add(BeanUtil.copyProperties(book, BookDto.class));});
+        if(books.isEmpty())return new Result<>(ResultType.FAIL.getCode(),"未找到类似书籍",null);
+        return new Result<List>(ResultType.SUCCESS.getCode(), "查找成功", bookDtoS);
+    }
+}
